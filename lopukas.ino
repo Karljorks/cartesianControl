@@ -39,7 +39,6 @@ bool reachedTarget = false;    // boolean if x-axis next position has been reach
 void resetCommandTimeout();
 void delayWhileResettingCommandTimeout(uint32_t ms);
 void waitForPosition(int32_t targetPosition);
-void advance(int Speed, int E, int M, boolean polarity, int timePosition);
 void axis_stop(int E, int M);
 void setup();
 void loop();
@@ -74,7 +73,7 @@ void waitForPosition(int32_t targetPosition)
   } while (tic.getCurrentPosition() != targetPosition); //wait until manipulator has reached the correct position
 }
 
-void advance(int Speed, int E, int M, boolean polarity, int timePosition) // move the z-axis motor, polarity decides if going up or down
+void moveMotorZ(int Speed, int E, int M, boolean polarity, int timePosition) // move the z-axis motor, polarity decides if going up or down
 {
  if (polarity == true) {
   digitalWrite(M,LOW);
@@ -101,8 +100,8 @@ void setup() {
   delay(20);
   tic.haltAndSetPosition(0); //set starting position to 0
   tic.exitSafeStart();
-  tic.setTargetVelocity(400);
-  tic.setStartingSpeed(2000);
+  tic.setTargetVelocity(200);
+  tic.setStartingSpeed(1000);
   for(int i=3;i<9;i++)
     pinMode(i,OUTPUT);
   for(int i=11;i<13;i++)
@@ -130,7 +129,8 @@ void loop() {
   Serial.println("3 - langeta marker alla:");
   Serial.println("4 - tõsta marker üles:");
   Serial.println("5 - vaheta samm-mootori kiirust:");
-  Serial.println("6 - välju programmist:");
+  Serial.println("6 - scripti käimapanek:");
+  Serial.println("7 - välju programmist:");
   
   // Flag to indicate whether input has been received
   bool inputReceived = false;
@@ -144,7 +144,7 @@ void loop() {
   int choice = Serial.parseInt();
   switch (choice) {
     case 1:
-      moveToPosition();
+      userInput();
       break;
     case 2:
       showCurrentPosition();
@@ -161,6 +161,10 @@ void loop() {
       changeStepperSpeed();
       break;
     case 6:
+      Serial.println("Skript alustas tööd.");
+      script();
+      break;
+    case 7:
       Serial.println("Programm suletud.");
       delay(100);
       exit(0);
@@ -188,24 +192,28 @@ void changeStepperSpeed(){
   Serial.println(" peale.");
 }
 
-void moveToPosition() {
+void userInput() {
   int xPosition, yPosition;
-  
   Serial.println("Sisesta soovitud koordinaadid (x (0-544), y (0-350), nt. 100 200):");
   
-  // Wait until input is received from the user
   while (Serial.available() == 0) {
     // Wait for input
   }
   
-  // Read the input position from the user
   String input = Serial.readStringUntil('\n');
   sscanf(input.c_str(), "%d %d", &xPosition, &yPosition);
+  moveToPosition(xPosition, yPosition);
+}
 
-  // Constrain the values within the valid range
-  xPosition = constrain(xPosition, 0, 544);
+void moveToPosition(int x, int y) {
+  prevT = 0;
+  eprev = 0;
+  eintegral = 0;
+  reachedTarget = false;
+  int xPosition, yPosition;
+  xPosition = constrain(x, 0, 544);
   nextposx = xPosition;
-  yPosition = constrain(yPosition, 0, 350);
+  yPosition = constrain(y, 0, 350);
 
   Serial.print("Liigud positsioonile: [");
   Serial.print(xPosition);
@@ -217,25 +225,31 @@ void moveToPosition() {
   xPosition = int(15.52 * xPosition);
   yPosition = yPosition * 4;
   delay(2); // Small delay for stability
-  
+
+  tic.setTargetPosition(yPosition);
   if(currentposx != nextposx) {
-    tic.setTargetPosition(yPosition);
     while(reachedTarget == false) {
     controlMotor(xPosition);
     }
   }
-
+  waitForPosition(yPosition);
   currentpos = posi;
   currentposx = nextposx;
-  Serial.println("Liikumine lõpetatud, ootan uut käsku.");
+}
+
+void fix() {
+  prevT = 0;
+  eprev = 0;
+  eintegral = 0;
+  reachedTarget = false;
 }
 
 void penUp() {
-  advance(80, E_leftz, M_leftz, true, 1000);
+  moveMotorZ(80, E_leftz, M_leftz, true, 1000);
 }
 
 void penDown() {
-  advance(80, E_leftz, M_leftz, false, 1000);
+  moveMotorZ(80, E_leftz, M_leftz, false, 1000);
 }
 
 void controlMotor(int target){
@@ -292,7 +306,7 @@ void controlMotor(int target){
 
 void setMotor(int dir, int pwmVal, int in1, int in2) {
   // Set motor speed and direction
-  analogWrite(IN1, pwmVal / 2);
+  analogWrite(IN1, pwmVal / 4);
   if (dir == 1) {
     digitalWrite(IN2, LOW);
     return;
@@ -300,6 +314,72 @@ void setMotor(int dir, int pwmVal, int in1, int in2) {
     digitalWrite(IN2, HIGH);
     return;
   }
+}
+
+// Define the function loop
+void script() {
+  moveToPosition(105, 120);
+  penDown();
+  moveToPosition(145, 120);
+  moveToPosition(125, 120);
+  moveToPosition(125, 220); //T
+  Serial.println("T joonestatud");
+  penUp();
+  moveToPosition(155, 220);
+  penDown();
+  moveToPosition(155, 120);
+  moveToPosition(195, 120);
+  moveToPosition(195, 220);
+  penUp();
+  moveToPosition(195, 170);
+  penDown();
+  moveToPosition(151, 170); //A
+  Serial.println("A joonestatud");
+  penUp();
+  moveToPosition(205, 120);
+  penDown();
+  moveToPosition(205, 220);
+  moveToPosition(245, 220); //L
+  Serial.println("L joonestatud");
+  penUp();
+  moveToPosition(265, 220);
+  penDown();
+  moveToPosition(265, 120);
+  moveToPosition(245, 120);
+  moveToPosition(285, 120); //T
+  Serial.println("T joonestatud");
+  penUp();
+  moveToPosition(335, 120);
+  penDown();
+  moveToPosition(295, 120);
+  moveToPosition(295, 220);
+  moveToPosition(335, 220);
+  penUp();
+  moveToPosition(335, 170);
+  penDown();
+  moveToPosition(295, 170); //L
+  Serial.println("E joonestatud");
+  penUp();
+  moveToPosition(385, 120);
+  penDown();
+  moveToPosition(345, 120);
+  moveToPosition(345, 220);
+  moveToPosition(385, 220); //C
+  Serial.println("C joonestatud");
+  penUp();
+  moveToPosition(435, 120);
+  penDown();
+  moveToPosition(435, 220);
+  penUp();
+  moveToPosition(395, 120); 
+  penDown();
+  moveToPosition(395, 220); 
+  moveToPosition(395, 160); 
+  moveToPosition(435, 160); 
+  Serial.println("H joonestatud");
+  penUp();
+  moveToPosition(0, 0);
+  Serial.println("Skript lõpetas töö.");
 }
 
 void readEncoder() {
